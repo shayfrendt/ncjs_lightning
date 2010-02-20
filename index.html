@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+<title>Lightning Strikes</title>
+<style>
+body { font-family: 'Lucida Grande', 'Helvetica', sans-serif;}
+h1{ color: #35CCFF;}
+p { color: #142B51;}
+label {padding-right:10px;}
+.strike{ font-size: 18px; color: #375D81; padding-bottom: 25px;}
+.timestamp{ font-size: 12px; color: #2A2924;}
+</style>
+<script type="text/javascript" src="jquery-1.4.1.min.js"></script>
+<script>
+var db;
+
+try {
+    if (window.openDatabase) {
+        db = openDatabase("Lightning", "1.0", "NCJS Lightning Talk - HTML5 Database API example", 200000);
+        if (!db)
+            alert("Failed to open the database on disk.  This is probably because the version was bad or there is not enough space left in this domain's quota");
+    } else
+        alert("Couldn't open the database.  Please try with a WebKit nightly with this feature enabled");
+} catch(err) { }
+
+var captured = null;
+var highestId = 0;
+
+function Strike()
+{
+  var self = this;
+
+  var strike = document.createElement('div');
+  strike.className = 'strike';
+  this.strike = strike;
+
+  var occurrenceDescription = document.createElement('span');
+  occurrenceDescription.className = 'strike';
+  occurrenceDescription.textContent = strike.occurrence_description;
+  strike.appendChild(occurrenceDescription);
+  this.occurrenceDescriptionField = occurrenceDescription;
+
+  var ts = document.createElement('div');
+  ts.className = 'timestamp';
+  strike.appendChild(ts);
+  this.lastModified = ts;
+
+  document.body.appendChild(strike);
+  return this;
+}
+
+Strike.prototype = {
+  get id()
+  {
+    if (!("_id" in this))
+    this._id = 0;
+    return this._id;
+  },
+
+  set id(x)
+  {
+    this._id = x;
+  },
+
+  get occurrence_description()
+  {
+    return this._occurrence_description;
+  },
+
+  set occurrence_description(x)
+  {
+    this._occurrence_description = x;
+    this.occurrenceDescriptionField.innerHTML = x;
+  },
+
+  get timestamp()
+  {
+    if (!("_timestamp" in this))
+    this._timestamp = 0;
+    return this._timestamp;
+  },
+
+  set timestamp(x)
+  {
+    if (this._timestamp == x)
+    return;
+
+    this._timestamp = x;
+    var date = new Date();
+    date.setTime(parseFloat(x));
+    this.lastModified.textContent = modifiedString(date);
+  },
+
+  saveAsNew: function()
+  {
+    this.timestamp = new Date().getTime();
+
+    var strike = this;
+    db.transaction(function (tx) 
+    {
+      tx.executeSql("INSERT INTO Strikes (id, occurrence_description, timestamp) VALUES (?, ?, ?)", [strike.id, strike.occurrence_description, strike.timestamp]);
+    }); 
+  },
+}
+
+function loaded()
+{
+  db.transaction(function(tx) {
+    tx.executeSql("SELECT COUNT(*) FROM Strikes", [], function(result) {
+      loadStrikes();
+    }, function(tx, error) {
+      tx.executeSql("CREATE TABLE Strikes (id REAL UNIQUE, occurrence_description TEXT, timestamp REAL)", [], function(result) { 
+        loadStrikes(); 
+      });
+    });
+  });
+}
+
+function loadStrikes()
+{
+  db.transaction(function(tx) {
+    tx.executeSql("SELECT id, occurrence_description, timestamp FROM Strikes", [], function(tx, result) {
+      for (var i = 0; i < result.rows.length; ++i) {
+        var row = result.rows.item(i);
+        var strike = new Strike();
+        strike.id = row['id'];
+        strike.occurrence_description = row['occurrence_description'];
+        strike.timestamp = row['timestamp'];
+
+        if (row['id'] > highestId)
+        highestId = row['id'];
+      }
+    }, function(tx, error) {
+      alert('Failed to retrieve strikes from database - ' + error.message);
+      return;
+    });
+  });
+}
+
+function modifiedString(date)
+{
+  return 'Last Struck: ' + date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate() + ' ' + date.getHours() + ':' + date.getMinutes() + ':' + date.getSeconds();
+}
+
+function newStrike(e)
+{
+    var strike = new Strike();
+    strike.id = ++highestId;
+    strike.occurrence_description = $("#occurrence_description").val();
+    strike.timestamp = new Date().getTime();
+    strike.saveAsNew();
+    e.preventDefault();
+}
+
+function seedData() {
+  db.transaction(function (tx) 
+  {
+    tx.executeSql("INSERT INTO Strikes (id, occurrence_description, timestamp) VALUES (?, ?, ?)", [1, "It was tasty", 1234.53]);
+  });  
+}
+
+addEventListener('load', loaded, false);
+
+
+$(document).ready(function(){
+  $("#new_strike_form").submit(newStrike);  
+  // seedData();
+});
+
+</script>
+</head>
+<body>
+  <h1>You Got Struck by Lightning!</h1>
+  <p>Plz share ur experience with the rest of us non-lightninged peoplz.</p>
+  <form action="#" id="new_strike_form" accept-charset="utf-8">    
+    <label for="occurrence_description">How'd it feel?</label><input type="text" name="occurrence_description" value="" id="occurrence_description">
+    <p><input type="submit" value="Record Strike"></p>
+  </form>    
+</body>
+</html>
